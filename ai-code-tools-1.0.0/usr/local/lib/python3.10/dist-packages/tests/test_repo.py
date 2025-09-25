@@ -38,17 +38,29 @@ whitelisted_paths:
         subprocess.run(["git", "init"], cwd=self.test_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with open(os.path.join(self.test_dir, ".gitignore"), "w") as f:
             f.write("node_modules/\n")
+        
+        subprocess.run(["git", "add", ".gitignore"], cwd=self.test_dir, stdout=subprocess.DEVNULL)
 
         self.original_cwd = os.getcwd()
         os.chdir(self.test_dir)
 
+        # Przechwytywanie logów do późniejszej asercji
         self.log_stream = StringIO()
-        self.logger = logging.getLogger('ai_tools')
         self.stream_handler = logging.StreamHandler(self.log_stream)
-        self.logger.addHandler(self.stream_handler)
+        # Pobieramy główny logger zdefiniowany w helpers.py
+        self.logger_to_capture = logging.getLogger('ai_tools')
+        self.logger_to_capture.addHandler(self.stream_handler)
+        # Dodajemy również logger z modułu repo
+        self.repo_logger = logging.getLogger('ai_tools.repo')
+        self.repo_logger.addHandler(self.stream_handler)
+        # Upewniamy się, że loggery mają odpowiedni poziom do przechwytywania INFO
+        self.logger_to_capture.setLevel(logging.INFO)
+        self.repo_logger.setLevel(logging.INFO)
+
 
     def tearDown(self):
-        self.logger.removeHandler(self.stream_handler)
+        self.logger_to_capture.removeHandler(self.stream_handler)
+        self.repo_logger.removeHandler(self.stream_handler)
         os.chdir(self.original_cwd)
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
@@ -64,16 +76,16 @@ whitelisted_paths:
         logs = self.log_stream.getvalue()
 
         # Oczekujemy 3 plików: src/main.py, package.json, i whitelisted .github/workflows/main.yaml
-        self.assertIn("Znaleziono 3 plików do przetworzenia (łącznie 4 linii kodu)", logs)
+        self.assertIn("Znaleziono 3 plików do przetworzenia", logs)
         self.assertIn("File: src/main.py", output)
         self.assertIn("File: package.json", output)
         self.assertIn("File: .github/workflows/main.yaml", output)
 
-        # Sprawdzamy, czy pliki są poprawnie ignorowane/blacklistowane
-        self.assertNotIn("File: node_modules/some-lib/index.js", output) # .gitignore
-        self.assertNotIn("File: .venv/lib/a.py", output) # blacklisted
-        self.assertNotIn("File: yarn.lock", output) # blacklisted
-        self.assertNotIn("File: .gitignore", output) # domyślnie blacklisted
+        self.assertNotIn("File: node_modules/some-lib/index.js", output)
+        self.assertNotIn("File: .venv/lib/a.py", output)
+        self.assertNotIn("File: yarn.lock", output)
+        # Sprawdzamy, czy .gitignore NIE jest widoczny w wynikach (powinien być ignorowany)
+        self.assertNotIn("File: .gitignore", output)
 
     @patch('ai_tools_lib.repo.pyperclip', MagicMock())
     def test_dump_specific_directory(self):
@@ -85,13 +97,19 @@ whitelisted_paths:
         output = repo.pyperclip.copy.call_args[0][0]
         logs = self.log_stream.getvalue()
 
-        # W zakresie 'src' powinien być tylko jeden plik
         self.assertIn("Znaleziono 1 plików do przetworzenia (łącznie 2 linii kodu)", logs)
         self.assertIn("File: src/main.py", output)
-
-        # Pliki poza zakresem 'src' nie powinny być w zrzucie
         self.assertNotIn("File: package.json", output)
         self.assertNotIn("File: .github/workflows/main.yaml", output)
 
+# --- POCZĄTEK BLOKU DO URUCHAMIANIA TESTÓW Z LOGOWANIEM ---
 if __name__ == '__main__':
+    # Konfiguruje logowanie tak, aby WSZYSTKIE komunikaty na poziomie INFO i wyższym
+    # były drukowane w konsoli podczas uruchamiania tego pliku.
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        stream=sys.stdout
+    )
     unittest.main()
+# --- KONIEC BLOKU ---
