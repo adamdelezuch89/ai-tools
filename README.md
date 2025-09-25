@@ -30,7 +30,7 @@ Przed użyciem narzędzi, w głównym katalogu swojego projektu stwórz plik o n
 **Lokalizacja:** `.ai-tools-config.yaml` (w głównym katalogu projektu)
 
 **Przykładowa zawartość:**
-```yaml
+``yaml
 # [Wymagane] Katalog na wygenerowane pliki zrzutów.
 # Ścieżka jest względna do głównego katalogu projektu.
 output_dir: .dump-outputs
@@ -55,7 +55,7 @@ blacklisted_paths:
 # nawet jeśli znajdują się w .gitignore.
 whitelisted_paths:
   - ".github/workflows/main.yaml"
-```
+``
 
 ---
 
@@ -65,14 +65,14 @@ whitelisted_paths:
 Tworzy zrzut tekstowy całego projektu lub jego wybranych części, respektując pliki `.gitignore` oraz konfigurację `blacklisted_paths` i `whitelisted_paths`.
 
 **Użycie:**
-```bash
+``bash
 # Zrzut całego projektu (od miejsca, gdzie znaleziono .ai-tools-config.yaml)
 dump-repo
 
 # Zrzut tylko katalogu 'src' i pliku 'package.json'
 # Ścieżki są względne do głównego katalogu projektu.
 dump-repo src package.json
-```
+``
 
 ### `dump-git`
 Tworzy zrzut tekstowy tylko tych plików, w których wykryto niezatwierdzone zmiany w repozytorium Git.
@@ -84,13 +84,13 @@ Tworzy zrzut tekstowy tylko tych plików, w których wykryto niezatwierdzone zmi
 | `--unstaged` | Tylko zmiany nieśledzone (`untracked`) i nie w poczekalni (`unstaged`). |
 
 **Użycie:**
-```bash
+``bash
 # Zrzut wszystkich niezatwierdzonych zmian
 dump-git
 
 # Zrzut tylko plików po wykonaniu 'git add'
 dump-git --staged
-```
+``
 
 ### `ai-patch`
 Aplikuje zmiany w kodzie na podstawie sformatowanego tekstu skopiowanego do schowka systemowego.
@@ -106,7 +106,7 @@ Narzędzie wczyta zawartość schowka, a następnie zaktualizuje lub utworzy odp
 **Format tekstu w schowku:**
 Tekst musi zawierać bloki z nagłówkami `File: <ścieżka>`, po których następuje blok kodu z nową zawartością pliku.
 
-```markdown
+``markdown
 ---
 File: src/components/Button.js
 ---
@@ -137,3 +137,4 @@ File: styles/buttons.css
   border-radius: 5px;
 }
 ` ``
+``
