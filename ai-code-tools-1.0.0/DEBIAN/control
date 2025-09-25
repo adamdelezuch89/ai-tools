@@ -1,0 +1,8 @@
+Package: ai-code-tools
+Version: 1.0.0
+Architecture: all
+Maintainer: Your Name <your.email@example.com>
+Depends: python3, python3-yaml, python3-pyperclip, git
+Description: Narzędzia AI do dumpowania kodu i implementacji zmian.
+ Zestaw narzędzi wiersza poleceń do tworzenia zrzutów kodu
+ dla modeli AI oraz do aplikowania zmian wygenerowanych przez AI.
