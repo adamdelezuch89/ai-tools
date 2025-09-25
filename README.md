@@ -138,3 +138,30 @@ File: styles/buttons.css
 }
 ` ``
 ``
+
+## Testowanie
+
+Projekt zawiera zestaw testów jednostkowych, które weryfikują poprawność działania kluczowych funkcjonalności, w tym logikę ignorowania plików i aplikowania zmian. Testy są napisane przy użyciu wbudowanego modułu `unittest` w Pythonie.
+
+Aby uruchomić testy:
+
+1.  **Przejdź do katalogu z kodem źródłowym i testami:**
+    Z głównego katalogu `ai-code-tools-builder` wykonaj polecenie:
+    ```bash
+    cd ai-code-tools-1.0.0/usr/local/lib/python3.10/dist-packages/
+    ```
+
+2.  **Uruchom automatyczne wykrywanie i wykonanie testów:**
+    ```bash
+    python3 -m unittest discover
+    ```
+
+Pomyślne wykonanie wszystkich testów zakończy się komunikatem podobnym do poniższego, informującym o liczbie uruchomionych testów i statusie `OK`.
+
+```bash
+.......
+----------------------------------------------------------------------
+Ran 7 tests in X.XXXs
+
+OK
+```

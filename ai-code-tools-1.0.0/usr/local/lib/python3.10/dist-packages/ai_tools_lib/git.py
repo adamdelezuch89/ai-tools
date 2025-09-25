@@ -57,10 +57,21 @@ def main():
         log_info("Brak zmian do zdumpowania.")
         return 0
 
-    log_info(f"Znaleziono {len(files_to_process)} zmienionych plików do przetworzenia.")
-    
     # Ścieżki z git są względne do git_root, więc tworzymy ścieżki absolutne
     absolute_paths = [os.path.join(git_root, path) for path in sorted(list(files_to_process))]
+    
+    # --- POCZĄTEK: ZMIANA - DODANIE ZLICZANIA LINII KODU ---
+    total_lines = 0
+    for file_path in absolute_paths:
+        try:
+            # Dla plików untracked, które mogą jeszcze nie istnieć na dysku
+            if not os.path.exists(file_path): continue
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                total_lines += sum(1 for _ in f)
+        except IOError:
+            continue
+    log_info(f"Znaleziono {len(absolute_paths)} zmienionych plików do przetworzenia (łącznie {total_lines} linii kodu).")
+    # --- KONIEC: ZMIANA ---
     
     output_parts = [
         format_file_content(path, project_root, config.get('extension_lang_map', {})) 

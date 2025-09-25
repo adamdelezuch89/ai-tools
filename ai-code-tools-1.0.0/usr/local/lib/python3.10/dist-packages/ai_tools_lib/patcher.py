@@ -50,27 +50,14 @@ def main():
         print("ℹ️ Nie znaleziono żadnych bloków kodu w schowku.", file=sys.stderr)
         return 0
     
-    # --- POCZĄTEK KLUCZOWEJ ZMIANY ---
-    
-    # STARY, DWUZNACZNY REGEX został usunięty.
-    # NOWY, JEDNOZNACZNY REGEX:
-    # Definiuje ścieżkę jako ciąg segmentów oddzielonych ukośnikami.
-    # Używa "negatywnego spojrzenia w przód" (?!\s), aby upewnić się, że ścieżka
-    # nie jest tylko częścią dłuższego słowa.
-    # Kluczowy warunek: (?=.*[./]) - wymaga, aby w całym dopasowaniu znalazł się
-    # przynajmniej jeden ukośnik LUB jedna kropka, co eliminuje pojedyncze słowa.
     path_regex = re.compile(
         r'[`\'"]?'
         r'('
-        # Pozytywne spojrzenie w przód: upewnij się, że ciąg zawiera '/' lub '.'
         r'(?=.*[./])'
-        # Główny wzorzec: segmenty oddzielone ukośnikami
         r'(?:[\w\-\.]+(?:\/[\w\-\.]+)*)'
         r')'
         r'[`\'"]?'
     )
-
-    # --- KONIEC KLUCZOWEJ ZMIANY ---
 
     patches = []
     last_match_end = 0
@@ -99,13 +86,14 @@ def main():
         return 0
 
     print(f"\n✨ Znaleziono {len(patches)} plików do aktualizacji.")
-    # Reszta kodu do zapisu plików pozostaje bez zmian...
     error_count = 0
     for path, content in patches:
         try:
             target_path = os.path.normpath(os.path.join(base_dir, path))
             if not os.path.abspath(target_path).startswith(os.path.abspath(base_dir)):
-                 print(f"❌ Błąd bezpieczeństwa: Ścieżka '{path}' próbuje zapisać plik poza katalogiem projektu. Pomijam.")
+                 # --- POCZĄTEK POPRAWKI ---
+                 print(f"❌ Błąd bezpieczeństwa: Ścieżka '{path}' próbuje zapisać plik poza katalogiem projektu. Pomijam.", file=sys.stderr)
+                 # --- KONIEC POPRAWKI ---
                  error_count += 1
                  continue
 

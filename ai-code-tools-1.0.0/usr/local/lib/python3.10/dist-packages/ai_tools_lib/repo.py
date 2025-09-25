@@ -1,6 +1,7 @@
 import argparse
 import fnmatch
 import os
+import subprocess
 from datetime import datetime
 import pyperclip
 from .helpers import (log_error, log_info, log_success, log_warning,
@@ -13,14 +14,8 @@ def is_binary(filepath, chunk_size=1024):
             return b'\0' in f.read(chunk_size)
     except IOError: return True
 
-def load_gitignore_patterns(git_root):
-    if not git_root: return []
-    gitignore_path = os.path.join(git_root, '.gitignore')
-    if not os.path.exists(gitignore_path): return []
-    with open(gitignore_path, 'r', encoding='utf-8') as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
-
 def is_path_match(rel_path, patterns):
+    """Twoja oryginalna, sprawdzona funkcja do dopasowywania wzorców dla whitelist/blacklist."""
     path_to_check = rel_path.replace(os.path.sep, '/')
     for pattern in patterns:
         if pattern.endswith('/'):
@@ -30,19 +25,38 @@ def is_path_match(rel_path, patterns):
             return True
     return False
 
+# --- NOWA, NIEZAWODNA FUNKCJA DO SPRAWDZANIA .gitignore ---
+def is_git_ignored(file_abs_path, git_root):
+    """
+    Sprawdza, czy pojedynczy plik jest ignorowany przez Git, wywołując `git check-ignore`.
+    Jest to najbardziej niezawodna metoda.
+    """
+    if not git_root:
+        return False
+    try:
+        # Używamy `-q` (quiet), aby polecenie zakończyło się kodem 0 jeśli ignorowany, 1 jeśli nie,
+        # bez wypisywania czegokolwiek na standardowe wyjście.
+        result = subprocess.run(
+            ['git', '-C', git_root, 'check-ignore', '-q', file_abs_path],
+            check=False # Nie rzucaj wyjątku, jeśli plik nie jest ignorowany
+        )
+        # Kod powrotu 0 oznacza, że plik JEST ignorowany.
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # W razie problemów z Gitem, zakładamy, że plik nie jest ignorowany.
+        return False
+
 def get_files_to_dump(paths_to_scan, start_dir, project_root, git_root, config):
+    # --- TWOJA ORYGINALNA, SPRAWDZONA LOGIKA ---
     DEFAULT_BLACKLIST = ['.git/']
     
     whitelisted_patterns = config['whitelisted_paths']
     blacklisted_patterns_config = config['blacklisted_paths']
-    gitignore_patterns = load_gitignore_patterns(git_root)
     
     files_to_include = set()
 
-    # --- POPRAWIONA, NIEZAWODNA LOGIKA WYKLUCZANIA ---
     output_dir_abs = os.path.abspath(os.path.join(project_root, config['output_dir']))
     config_file_abs = os.path.abspath(os.path.join(project_root, CONFIG_FILENAME))
-    # --- KONIEC POPRAWKI ---
 
     for path_arg in paths_to_scan:
         abs_path_arg = os.path.abspath(os.path.join(start_dir, path_arg))
@@ -51,35 +65,37 @@ def get_files_to_dump(paths_to_scan, start_dir, project_root, git_root, config):
             log_warning(f"Podana ścieżka nie istnieje i została pominięta: {path_arg}")
             continue
         
+        # Obsługa przypadku, gdy podano bezpośrednią ścieżkę do pliku
         if os.path.isfile(abs_path_arg):
              if not is_binary(abs_path_arg):
                 files_to_include.add(abs_path_arg)
              continue
 
-        for root, dirs, files in os.walk(abs_path_arg, topdown=True):
+        for root, _, files in os.walk(abs_path_arg, topdown=True):
             for filename in files:
                 file_abs_path = os.path.join(root, filename)
                 rel_path_from_project = os.path.relpath(file_abs_path, project_root)
 
-                # --- POPRAWIONA, NIEZAWODNA LOGIKA WYKLUCZANIA ---
+                # Niezmienne wykluczenia
                 if file_abs_path.startswith(output_dir_abs) or file_abs_path == config_file_abs:
                     continue
-                # --- KONIEC POPRAWKI ---
                 
+                # 1. Whitelist ma najwyższy priorytet
                 if is_path_match(rel_path_from_project, whitelisted_patterns):
                     if not is_binary(file_abs_path):
                         files_to_include.add(file_abs_path)
                     continue
                 
-                # Łączymy twardą listę z konfiguracyjną
+                # 2. Blacklist jest sprawdzany zaraz po whiteliscie
                 if is_path_match(rel_path_from_project, DEFAULT_BLACKLIST + blacklisted_patterns_config):
                     continue
 
-                if git_root:
-                    rel_path_from_git = os.path.relpath(file_abs_path, git_root)
-                    if is_path_match(rel_path_from_git, gitignore_patterns):
-                        continue
+                # 3. --- JEDYNA ZMIANA: NIEZAWODNE SPRAWDZANIE .gitignore ---
+                # Zamiast ręcznego parsowania, pytamy bezpośrednio Gita.
+                if is_git_ignored(file_abs_path, git_root):
+                    continue
                 
+                # Jeśli plik przeszedł wszystkie testy, dodajemy go
                 if not is_binary(file_abs_path):
                     files_to_include.add(file_abs_path)
     
@@ -101,9 +117,17 @@ def main():
         log_info("Nie znaleziono żadnych plików pasujących do kryteriów.")
         return 0
 
-    log_info(f"Znaleziono {len(files_to_process)} plików do przetworzenia.")
+    # Dodanie logowania liczby linii kodu
+    total_lines = 0
+    for file_path in files_to_process:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                total_lines += sum(1 for _ in f)
+        except IOError:
+            continue
+    log_info(f"Znaleziono {len(files_to_process)} plików do przetworzenia (łącznie {total_lines} linii kodu).")
 
-    output_parts = [format_file_content(f, project_root, config['extension_lang_map']) for f in files_to_process]
+    output_parts = [format_file_content(f, project_root, config.get('extension_lang_map', {})) for f in files_to_process]
     
     output_dir_path = os.path.join(project_root, config['output_dir'])
     os.makedirs(output_dir_path, exist_ok=True)
