@@ -1,7 +1,7 @@
 import os
 import sys
 import pyperclip
-from .helpers import log_error, log_info, log_success, parse_patch_content
+from .helpers import log_error, log_error_non_fatal, log_info, log_success, parse_patch_content
 
 def main():
     base_dir = os.getcwd()
@@ -30,7 +30,7 @@ def main():
             # Zapewnienie, że ścieżka jest względna i bezpieczna
             target_path = os.path.normpath(os.path.join(base_dir, path))
             if not os.path.abspath(target_path).startswith(os.path.abspath(base_dir)):
-                log_error(f"Błąd bezpieczeństwa: Ścieżka '{path}' próbuje zapisać plik poza katalogiem projektu. Pomijam.")
+                log_error_non_fatal(f"Błąd bezpieczeństwa: Ścieżka '{path}' próbuje zapisać plik poza katalogiem projektu. Pomijam.")
                 error_count += 1
                 continue
 
@@ -46,12 +46,12 @@ def main():
             log_success(f"Zaktualizowano: {path}")
 
         except Exception as e:
-            log_error(f"Błąd zapisu pliku '{path}': {e}")
+            log_error_non_fatal(f"Błąd zapisu pliku '{path}': {e}")
             error_count += 1
             
     if error_count == 0:
         log_success("\nWszystkie zmiany zastosowane pomyślnie.")
         return 0
     else:
-        log_error(f"\nUkończono z {error_count} błędami.")
+        log_error_non_fatal(f"\nUkończono z {error_count} błędami.")
         return 1

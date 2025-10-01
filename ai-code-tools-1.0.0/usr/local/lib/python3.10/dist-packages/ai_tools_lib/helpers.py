@@ -19,7 +19,11 @@ RESET = "\033[0m"
 def log_info(message): logger.info(message)
 def log_success(message): logger.info(f"{GREEN}✔ {message}{RESET}")
 def log_warning(message): logger.warning(f"{YELLOW}⚠ {message}{RESET}")
+def log_error_non_fatal(message): 
+    """Loguje błąd bez przerywania wykonania programu."""
+    logger.error(f"{RED}✖ BŁĄD: {message}{RESET}")
 def log_error(message):
+    """Loguje błąd krytyczny i przerywa wykonanie programu."""
     logger.error(f"{RED}✖ BŁĄD: {message}{RESET}")
     sys.exit(1)
 
@@ -114,6 +118,58 @@ def format_file_content(file_path, project_root, extension_map):
 
 # --- SEKCJA PARSOWANIA ZMIAN ---
 
+# Pattern do wykrywania ścieżek plików (obsługuje / i \)
+# Akceptuje tylko ./ na początku, NIE akceptuje ../ (path traversal)
+FILE_PATH_PATTERN = re.compile(
+    r'^(?:\.[/\\])?(?:[\w\-.]+[/\\])*[\w\-.]+\.[A-Za-z0-9]+$'
+)
+
+# Znaki markdownowe, które mogą otaczać ścieżkę
+MARKDOWN_STRIP_CHARS = r"*`_[]()<>!"
+
+def _clean_markdown_wrappers(token):
+    """Usuwa znaczniki markdownowe z początku i końca tokena."""
+    # Najpierw usuń końcową kropkę jeśli istnieje (z końca zdania)
+    if token.endswith('.') and len(token) > 1:
+        # Sprawdź czy przed kropką może być rozszerzenie pliku
+        # Usuwamy kropkę tymczasowo, aby strip() mógł dotrzeć do znaczników markdown
+        token = token[:-1]
+    
+    # Teraz usuń znaczniki markdown
+    cleaned = token.strip(MARKDOWN_STRIP_CHARS)
+    
+    # Jeszcze raz sprawdź czy nie ma kropki na końcu (gdyby była między znacznikami)
+    if cleaned.endswith('.') and len(cleaned) > 1:
+        without_last_dot = cleaned[:-1]
+        if '.' in without_last_dot:
+            cleaned = without_last_dot
+    
+    return cleaned
+
+def _extract_path_from_text(text):
+    """
+    Wyodrębnia ścieżkę pliku z tekstu, dzieląc go po białych znakach
+    i sprawdzając każdy token względem wzorca ścieżki pliku.
+    Zwraca ostatnią znalezioną ścieżkę lub None.
+    Odrzuca ścieżki z path traversal (..) jako potencjalne zagrożenie bezpieczeństwa.
+    """
+    found_paths = []
+    for token in text.split():
+        cleaned = _clean_markdown_wrappers(token)
+        # Usuń prefiks @ (np. @alias/utils.js)
+        if cleaned.startswith("@"):
+            cleaned = cleaned[1:]
+        # Sprawdź czy token pasuje do wzorca ścieżki
+        if FILE_PATH_PATTERN.match(cleaned):
+            # BEZPIECZEŃSTWO: Odrzuć ścieżki próbujące wyjść poza katalog (path traversal)
+            if cleaned.startswith('..'):
+                log_warning(f"Odrzucono ścieżkę z path traversal (potencjalne zagrożenie bezpieczeństwa): '{cleaned}'")
+                continue
+            found_paths.append(cleaned)
+    
+    # Zwróć ostatnią znalezioną ścieżkę (zgodnie z logiką oryginalną)
+    return found_paths[-1] if found_paths else None
+
 def _find_blocks_with_regex(text):
     """
     Znajduje bloki kodu najwyższego poziomu. Ignoruje wcięcia i elastycznie
@@ -195,35 +251,20 @@ def parse_patch_content(text):
 
     patches = []
     last_block_end = 0
-    
-    alphanumeric_check = re.compile(r'[a-zA-Z0-9]')
 
     for opening_tag_start, block_start, block_end, code_content in found_blocks:
         # PRZESTRZEŃ DO PRZESZUKIWANIA KOŃCZY SIĘ TERAZ PRZED ZNACZNIKIEM OTWIERAJĄCYM
         search_space = content_to_parse[last_block_end:opening_tag_start]
         
-        word_candidates = list(re.finditer(r'\S+', search_space))
-        
-        path_candidates = [
-            m for m in word_candidates
-            if '.' in m.group(0) or '/' in m.group(0) or '\\' in m.group(0)
-        ]
+        # Użyj nowej funkcji do wyodrębniania ścieżki
+        path = _extract_path_from_text(search_space)
 
-        path_found_for_block = False
-        if path_candidates:
-            last_candidate_match = path_candidates[-1]
-            
-            gap_start_offset = last_candidate_match.end()
-            gap_text = search_space[gap_start_offset:]
-            
-            # Ten warunek jest teraz bezpieczny, bo `search_space` nie zawiera ` ```python`
-            if not alphanumeric_check.search(gap_text):
-                path = last_candidate_match.group(0).strip('`\'"').replace('\\', '/')
-                stripped_code_content = code_content.strip()
-                patches.append((path, stripped_code_content))
-                path_found_for_block = True
-        
-        if not path_found_for_block:
+        if path:
+            # Normalizuj ścieżkę (zamień backslashe na forwardslashe)
+            path = path.replace('\\', '/')
+            stripped_code_content = code_content.strip()
+            patches.append((path, stripped_code_content))
+        else:
             block_preview = code_content.strip().split('\n', 1)
             log_warning(f"Pominięto blok kodu, bo nie znaleziono dla niego prawidłowej ścieżki: '{block_preview[:70]}...'")
 
