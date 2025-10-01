@@ -4,115 +4,296 @@ Zestaw narzędzi wiersza poleceń dla systemów Ubuntu/Debian, przeznaczony do t
 
 Narzędzia działają w kontekście "projektu", który jest definiowany przez obecność pliku `.ai-tools-config.yaml`. Wyszukiwanie projektu odbywa się od bieżącego katalogu roboczego w górę.
 
-## Instalacja (jako paczka .deb)
+## ✨ Główne Zastosowania
 
-Narzędzia są dystrybuowane jako standardowa paczka systemowa, co zapewnia globalną dostępność poleceń i automatyczne zarządzanie zależnościami.
+Głównym celem narzędzi jest usprawnienie współpracy z modelami językowymi (AI) poprzez dwie kluczowe funkcje:
+
+1.  **Przygotowanie Kodu dla AI (`dump-repo`, `dump-git`)**
+    *   **Co to robi?** Konsoliduje kod całego Twojego projektu lub tylko zmiany z Git do jednego, czystego pliku tekstowego.
+    *   **Po co?** Abyś mógł łatwo skopiować i wkleić kontekst swojego repozytorium do modelu językowego (np. Gemini, ChatGPT, Claude). Dzięki temu możesz zadawać precyzyjne pytania, prosić o refaktoryzację, debugowanie lub implementację nowych funkcji. Narzędzie inteligentnie filtruje niepotrzebne pliki (np. `node_modules`) i ukrywa wrażliwe dane.
+
+2.  **Implementacja Zmian od AI (`ai-patch`)**
+    *   **Co to robi?** Automatycznie wgrywa zmiany w kodzie, które otrzymałeś od modelu AI.
+    *   **Po co?** Kiedy AI wygeneruje dla Ciebie fragmenty kodu lub całe pliki, zamiast ręcznie je kopiować i wklejać do odpowiednich miejsc w projekcie, po prostu kopiujesz całą odpowiedź AI do schowka i uruchamiasz `ai-patch`. Narzędzie samo rozpozna ścieżki plików i wdroży zmiany za Ciebie, oszczędzając czas i redukując ryzyko pomyłki.
+
+## Instalacja
+
+### Instalacja deweloperska (zalecana dla development)
+
+```bash
+# Klonuj repozytorium
+git clone https://github.com/adamdelezuch89/ai-tools.git
+cd ai-tools
+
+# Zainstaluj w trybie edytowalnym
+pip install -e .
+
+# Lub z zależnościami deweloperskimi
+pip install -e ".[dev]"
+```
+
+Po instalacji, polecenia `dump-repo`, `dump-git` i `ai-patch` będą dostępne globalnie.
+
+### Instalacja z paczki .deb
+
+Narzędzia można również zainstalować jako standardową paczkę systemową:
 
 1.  **Zbuduj paczkę:**
-    Przejdź do katalogu `ai-code-tools-builder` i uruchom polecenie:
     ```bash
-    dpkg-deb --build ai-code-tools-1.0.0
+    ./scripts/build_deb.sh
     ```
-    W katalogu `ai-code-tools-builder` zostanie utworzony plik `ai-code-tools-1.0.0.deb`.
 
 2.  **Zainstaluj paczkę:**
-    Użyj `apt` do instalacji, co automatycznie pobierze wymagane zależności (np. `python3-yaml`).
     ```bash
     sudo apt install ./ai-code-tools-1.0.0.deb
     ```
 
-Po instalacji, polecenia `dump-repo`, `dump-git` i `ai-patch` będą dostępne w całym systemie.
+## Szybki start
+
+```bash
+# 1. Utwórz plik konfiguracyjny
+dump-repo --init
+
+# 2. (Opcjonalnie) Edytuj .ai-tools-config.yaml
+
+# 3. Użyj narzędzi
+dump-repo           # Dump całego projektu
+dump-git            # Dump tylko zmian
+
+# 4. Przeglądaj i przywracaj
+dump-repo --list    # Zobacz ostatnie dumpy (kliknij link lub wpisz numer)
+dump-repo --restore # Przywróć z ostatniego dumpu
+```
 
 ## Konfiguracja Projektu
 
-Przed użyciem narzędzi, w głównym katalogu swojego projektu stwórz plik o nazwie `.ai-tools-config.yaml`.
+### Przechowywanie dumpów
+
+Dumpy są automatycznie zapisywane w systemowym temp (`/tmp/ai-tools/<projekt>/<tool>/`) i czyszczone po 7 dniach. Każdy projekt ma osobny katalog identyfikowany przez hash ścieżki.
+
+### Plik konfiguracyjny
+
+Plik `.ai-tools-config.yaml` w głównym katalogu projektu kontroluje zachowanie narzędzi.
+
+**Automatyczne tworzenie:**
+```bash
+dump-repo --init   # lub
+dump-git --init
+```
 
 **Lokalizacja:** `.ai-tools-config.yaml` (w głównym katalogu projektu)
 
 **Przykładowa zawartość:**
 ```yaml
 # [Wymagane] Katalog na wygenerowane pliki zrzutów.
-# Ścieżka jest względna do głównego katalogu projektu.
 output_dir: .dump-outputs
 
-# [Opcjonalne] Mapowanie rozszerzeń na języki w blokach markdown.
+# [Opcjonalne] Ukrywanie wrażliwych wartości z plików .env
+# Domyślnie: true (zalecane dla bezpieczeństwa)
+hide_env: true
+
+# [Opcjonalne] Dodatkowe mapowanie rozszerzeń (rozszerza domyślne)
+# System ma wbudowane mapowanie dla 40+ popularnych rozszerzeń
+# Tutaj możesz dodać tylko niestandardowe rozszerzenia
 extension_lang_map:
-  .py: python
-  .js: javascript
-  .ts: typescript
-  .md: markdown
-  .yaml: yaml
+  .custom: customlang
+  .special: special
 
-# [Opcjonalne - dla dump-repo] Ścieżki, które mają być ZAWSZE ignorowane.
-# Ma najwyższy priorytet, nawet nad .gitignore i whitelists.
+# [Opcjonalne] Ścieżki do wykluczenia (blacklist).
+# Może zawierać katalogi (z/bez ukośnika) i wzorce wildcard.
 blacklisted_paths:
-  - "node_modules/"
-  - ".venv/"
+  - "node_modules"      # Katalog bez ukośnika
+  - ".venv/"            # Katalog z ukośnikiem
   - "dist/"
-  - "*.lock"
+  - "*.lock"            # Wzorzec wildcard
 
-# [Opcjonalne - dla dump-repo] Ścieżki, które mają być ZAWSZE dołączone,
-# nawet jeśli znajdują się w .gitignore.
+# [Opcjonalne] Ścieżki do ZAWSZE dołączenia (whitelist).
+# Ma wyższy priorytet niż .gitignore, ale niższy niż blacklist (chyba że bardziej specyficzna).
 whitelisted_paths:
-  - ".github/workflows/main.yaml"
+  - ".github/workflows/"
 ```
+
+**Nota:** System ma wbudowane mapowanie dla najpopularniejszych rozszerzeń (`.js`, `.py`, `.ts`, `.html`, `.css`, `.go`, `.rs`, `.java`, `.php`, i 30+ innych). Dodawaj do `extension_lang_map` tylko niestandardowe rozszerzenia.
+
+### 🔒 Bezpieczeństwo - Ukrywanie wrażliwych danych
+
+**Domyślnie włączone!** Narzędzia automatycznie ukrywają wartości z plików `.env` przed utworzeniem dumpu.
+
+#### Jak to działa?
+
+1. System szuka plików `.env`, `.env.local`, `.env.development` w głównym katalogu projektu
+2. Wyodrębnia **wszystkie wartości** (nie klucze) z tych plików
+3. Podmienia każde wystąpienie tych wartości na `[HIDDEN_ENV_VALUE]` w dumpie
+
+#### Przykład:
+
+**Twój plik `.env`:**
+```env
+API_KEY=sk_test_1234567890abcdef
+DATABASE_URL=postgres://user:password@localhost:5432/mydb
+SECRET_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+```
+
+**Twój kod `src/config.js`:**
+```javascript
+const apiKey = 'sk_test_1234567890abcdef';
+const dbUrl = "postgres://user:password@localhost:5432/mydb";
+```
+
+**W dumpie zobaczysz:**
+```javascript
+const apiKey = '[HIDDEN_ENV_VALUE]';
+const dbUrl = "[HIDDEN_ENV_VALUE]";
+```
+
+#### Wyłączanie ukrywania (NIE ZALECANE)
+
+Jeśli z jakiegoś powodu musisz wyłączyć tę funkcję:
+
+```yaml
+hide_env: false  # ⚠️ Uwaga: wrażliwe dane będą widoczne w dumpie!
+```
+
+**⚠️ OSTRZEŻENIE:** Wyłączanie tej opcji może spowodować wyciek kluczy API, haseł i innych wrażliwych danych do AI lub do schowka systemowego!
+
+---
+
+### 🎯 Zaawansowane filtrowanie
+
+#### Priorytetyzacja reguł
+
+System stosuje inteligentną priorytetyzację opartą na **specyficzności** ścieżek:
+
+1. **Bardziej zagnieżdżona reguła wygrywa** - `vendor/libs/` ma wyższy priorytet niż `vendor/`
+2. **Przy tej samej specyficzności** - blacklist ma pierwszeństwo
+3. **Wykrywanie konfliktów** - system automatycznie wykrywa konflikty (ta sama ścieżka w obu listach)
+
+#### Przykłady
+
+**Przykład 1: Whitelisted katalog z blacklisted podkatalogiem**
+```yaml
+blacklisted_paths:
+  - "docs/internal/"     # Wykluczamy poufne dokumenty
+whitelisted_paths:
+  - "docs/"              # Ale reszta docs jest OK
+```
+Rezultat:
+- ✅ `docs/README.md` - załączone
+- ✅ `docs/api/guide.md` - załączone  
+- ❌ `docs/internal/secret.md` - wykluczone (bardziej specyficzna reguła)
+
+**Przykład 2: Blacklisted katalog z whitelisted podkatalogiem**
+```yaml
+blacklisted_paths:
+  - "build/"             # Wykluczamy outputy kompilacji
+whitelisted_paths:
+  - "build/config/"      # Ale config jest ważny
+```
+Rezultat:
+- ❌ `build/output.js` - wykluczone
+- ✅ `build/config/settings.json` - załączone (bardziej specyficzna reguła)
+- ❌ `build/cache/temp.js` - wykluczone
+
+**Przykład 3: Wielopoziomowe zagnieżdżenie**
+```yaml
+blacklisted_paths:
+  - "vendor/"                      # Poziom 1: wszystko wykluczone
+  - "vendor/libs/node_modules/"    # Poziom 3: bardziej specyficzne wykluczenie
+whitelisted_paths:
+  - "vendor/libs/"                 # Poziom 2: częściowe załączenie
+```
+Rezultat:
+- ❌ `vendor/readme.txt` - wykluczone (poziom 1)
+- ✅ `vendor/libs/important.js` - załączone (poziom 2)
+- ❌ `vendor/libs/node_modules/dep.js` - wykluczone (poziom 3 - najbardziej specyficzny)
 
 ---
 
 ## Dostępne Polecenia
 
+Każde polecenie ma zwięzły help dostępny przez `--help`, pokazujący aktualną konfigurację i co będzie dumpowane.
+
 ### `dump-repo`
-Tworzy zrzut tekstowy całego projektu lub jego wybranych części, respektując pliki `.gitignore` oraz konfigurację `blacklisted_paths` i `whitelisted_paths`.
+Tworzy zrzut tekstowy całego projektu lub jego wybranych części.
 
 **Użycie:**
 ```bash
-# Zrzut całego projektu (od miejsca, gdzie znaleziono .ai-tools-config.yaml)
+# Pierwsza konfiguracja projektu
+dump-repo --init
+
+# Zrzut całego projektu
 dump-repo
 
-# Zrzut tylko katalogu 'src' i pliku 'package.json'
-# Ścieżki są względne do głównego katalogu projektu.
-dump-repo src package.json
+# Zrzut tylko katalogu 'src'
+dump-repo src
+
+# Przeglądaj ostatnie dumpy (kliknij link lub przywróć)
+dump-repo --list
+
+# Przywróć z ostatniego dumpu
+dump-repo --restore
+
+# Przywróć z przedostatniego dumpu
+dump-repo --restore 2
+
+# Przywróć z trzeciego od końca
+dump-repo --restore 3
+
+# Zobacz konfigurację
+dump-repo --help
 ```
 
 ### `dump-git`
-Tworzy zrzut tekstowy tylko tych plików, w których wykryto niezatwierdzone zmiany w repozytorium Git.
-
-| Opcja | Opis |
-| :----------- | :--------------------------------------------------------- |
-| *(brak)* | Wszystkie zmiany (`staged` + `unstaged` + `untracked`). |
-| `--staged` | Tylko zmiany dodane do poczekalni (`staged`). |
-| `--unstaged` | Tylko zmiany nieśledzone (`untracked`) i nie w poczekalni (`unstaged`). |
+Tworzy zrzut tekstowy tylko **zmienionych** plików w Git.
 
 **Użycie:**
 ```bash
-# Zrzut wszystkich niezatwierdzonych zmian
+# Pierwsza konfiguracja projektu (jeśli nie istnieje)
+dump-git --init
+
+# Wszystkie zmiany
 dump-git
 
-# Zrzut tylko plików po wykonaniu 'git add'
+# Tylko staged
 dump-git --staged
+
+# Tylko unstaged i untracked
+dump-git --unstaged
+
+# Przeglądaj ostatnie dumpy (kliknij link lub przywróć)
+dump-git --list
+
+# Przywróć z ostatniego dumpu
+dump-git --restore
+
+# Przywróć z przedostatniego dumpu  
+dump-git --restore 2
+
+# Zobacz konfigurację
+dump-git --help
 ```
 
 ### `ai-patch`
-Aplikuje zmiany w kodzie na podstawie sformatowanego tekstu skopiowanego do schowka systemowego.
+Aplikuje zmiany z schowka do plików.
 
 **Użycie:**
-1.  Skopiuj do schowka cały tekst ze zmianami wygenerowany przez AI.
-2.  W terminalu, będąc w katalogu, w którym chcesz zastosować zmiany (zazwyczaj główny katalog projektu), uruchom polecenie:
-    ```bash
-    ai-patch
-    ```
-Narzędzie wczyta zawartość schowka, a następnie zaktualizuje lub utworzy odpowiednie pliki.
+```bash
+# 1. Skopiuj zmiany do schowka (Ctrl+C)
+# 2. Uruchom:
+ai-patch
+
+# Zobacz format wymagany
+ai-patch --help
+```
 
 **Format tekstu w schowku:**
-Tekst musi zawierać bloki z nagłówkami `File: <ścieżka>`, po których następuje blok kodu z nową zawartością pliku.
-
+```
 ---
 File: src/components/Button.js
 ---
 ```javascript
 import React from 'react';
 
-// Nowa, poprawiona wersja komponentu
 const Button = ({ onClick, children }) => {
   return (
     <button className="modern-button" onClick={onClick}>
@@ -136,30 +317,135 @@ File: styles/buttons.css
   border-radius: 5px;
 }
 ```
+```
+
+---
 
 ## Testowanie
 
-Projekt zawiera zestaw testów jednostkowych, które weryfikują poprawność działania kluczowych funkcjonalności, w tym logikę ignorowania plików i aplikowania zmian. Testy są napisane przy użyciu wbudowanego modułu `unittest` w Pythonie.
+```bash
+# Uruchomienie testów
+python -m unittest discover tests -v
 
-Aby uruchomić testy:
+# Lub z pytest
+pytest tests/ -v
 
-1.  **Przejdź do katalogu z kodem źródłowym i testami:**
-    Z głównego katalogu `ai-code-tools-builder` wykonaj polecenie:
-    ```bash
-    cd ai-code-tools-1.0.0/usr/local/lib/python3.10/dist-packages/
-    ```
+# Z coverage
+./scripts/run_tests.sh
+```
 
-2.  **Uruchom automatyczne wykrywanie i wykonanie testów:**
-    ```bash
-    python3 -m unittest discover
-    ```
+---
 
-Pomyślne wykonanie wszystkich testów zakończy się komunikatem podobnym do poniższego, informującym o liczbie uruchomionych testów i statusie `OK`.
+## Development
+
+### Struktura projektu
+
+```
+ai-tools/
+├── src/ai_tools/              # Kod źródłowy
+│   ├── cli/                   # Polecenia CLI
+│   │   ├── dump_repo.py       # dump-repo command
+│   │   ├── dump_git.py        # dump-git command  
+│   │   └── ai_patch.py        # ai-patch command
+│   ├── core/                  # Logika biznesowa
+│   │   ├── file_filter.py     # Filtrowanie plików (blacklist/whitelist)
+│   │   └── patch_ops.py       # Operacje patchowania
+│   └── utils/                 # Narzędzia pomocnicze
+│       ├── config.py          # Zarządzanie konfiguracją
+│       ├── logger.py          # Funkcje logowania
+│       ├── filesystem.py      # Operacje na plikach
+│       └── helpers.py         # Wrapper dla kompatybilności
+├── tests/                     # Testy jednostkowe
+├── debian/                    # Pliki dla paczki .deb
+├── scripts/                   # Skrypty pomocnicze
+│   ├── build_deb.sh          # Budowanie paczki .deb
+│   ├── run_tests.sh          # Uruchomienie testów z coverage
+│   └── cli_wrappers/         # Entry points dla poleceń
+├── setup.py                   # Konfiguracja pakietu Python
+├── pytest.ini                 # Konfiguracja pytest
+├── .coveragerc               # Konfiguracja coverage
+└── requirements.txt           # Zależności
+```
+
+### Instalacja deweloperska
 
 ```bash
-.......
-----------------------------------------------------------------------
-Ran 7 tests in X.XXXs
+# Klonuj repozytorium
+git clone https://github.com/yourusername/ai-tools.git
+cd ai-tools
 
-OK
+# Instaluj w trybie edytowalnym z zależnościami deweloperskimi
+pip install -e ".[dev]"
+
+# Uruchom testy
+python -m unittest discover tests -v
+
+# Lub z pytest i coverage
+./scripts/run_tests.sh
+
+# Lub manualnie
+pytest tests/ --cov=ai_tools --cov-report=html -v
+
+# Formatowanie kodu
+black src/ tests/
+
+# Linting
+flake8 src/ tests/
 ```
+
+### Dodawanie nowych funkcji
+
+1. Dodaj kod w odpowiednim module (`src/ai_tools/`)
+2. Napisz testy w `tests/`
+3. Zaktualizuj `CHANGELOG.md`
+4. Uruchom wszystkie testy przed commit
+
+---
+
+## FAQ
+
+**Q: Czy moje klucze API i hasła są bezpieczne?**  
+A: Tak! **Domyślnie wszystkie wartości z plików `.env` są automatycznie ukrywane** przed utworzeniem dumpu. Możesz bezpiecznie udostępniać dumpy AI bez ryzyka wycieku wrażliwych danych.
+
+**Q: Które pliki .env są skanowane?**  
+A: System automatycznie skanuje: `.env`, `.env.local`, `.env.development`, `.env.production` w głównym katalogu projektu.
+
+**Q: Co się stanie gdy ta sama ścieżka jest w blacklist i whitelist?**  
+A: System wykryje konflikt i **wyświetli błąd** podczas uruchamiania. Musisz poprawić konfigurację.
+
+**Q: Czy mogę wykluczyć cały katalog ale załączyć jego podkatalog?**  
+A: Tak! Użyj bardziej specyficznej reguły whitelist. Zobacz przykłady w sekcji "Zaawansowane filtrowanie".
+
+**Q: Czy katalogi muszą kończyć się ukośnikiem?**  
+A: Nie. System rozpoznaje `"src"` i `"src/"` jako ten sam katalog.
+
+**Q: Co z plikami binarnymi?**  
+A: Pliki binarne są automatycznie wykluczane z dumpu.
+
+**Q: Czy mogę wyłączyć ukrywanie .env?**  
+A: Tak, ale **NIE jest to zalecane**. Ustaw `hide_env: false` w konfiguracji. Używaj tylko jeśli masz pewność, że nie ma wrażliwych danych.
+
+**Q: Gdzie są zapisywane dumpy?**  
+A: W `/tmp/ai-tools/<projekt>/<tool>/`. Każdy projekt ma osobny katalog, dumpy są automatycznie czyszczone po 7 dniach.
+
+**Q: Jak przeglądać ostatnie dumpy?**  
+A: Użyj `dump-repo --list` lub `dump-git --list`. Możesz interaktywnie wybrać i otworzyć plik.
+
+**Q: Jak szybko skonfigurować nowy projekt?**  
+A: Uruchom `dump-repo --init`, edytuj utworzony `.ai-tools-config.yaml` i gotowe!
+
+**Q: Jak przywrócić pliki z poprzedniego dumpu?**  
+A: Użyj `dump-repo --restore` lub `dump-repo --restore 1` (ostatni), `dump-repo --restore 2` (przedostatni), itd.
+
+**Q: Jak przeglądać i przywracać dumpy?**  
+A: `dump-repo --list` pokazuje listę z klikalnymi linkami. Możesz też wpisać numer aby przywrócić pliki.
+
+---
+
+## Licencja
+
+MIT License - zobacz plik [LICENSE](LICENSE).
+
+## Changelog
+
+Zobacz plik [CHANGELOG.md](CHANGELOG.md) dla historii zmian.

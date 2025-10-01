@@ -7,7 +7,8 @@ import logging
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-from ai_tools_lib import git, helpers
+from ai_tools.cli import dump_git as git
+from ai_tools.utils import helpers
 
 class TestDumpGit(unittest.TestCase):
 
@@ -16,7 +17,7 @@ class TestDumpGit(unittest.TestCase):
         os.makedirs(self.test_dir, exist_ok=True)
 
         with open(os.path.join(self.test_dir, helpers.CONFIG_FILENAME), "w") as f:
-            f.write("output_dir: .dump-outputs\n")
+            f.write(f"output_dir: {os.path.join(self.test_dir, '.dump-outputs')}\n")
 
         subprocess.run(["git", "init"], cwd=self.test_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["git", "config", "user.name", "Test User"], cwd=self.test_dir)
@@ -33,7 +34,9 @@ class TestDumpGit(unittest.TestCase):
         self.log_stream = StringIO()
         self.logger = logging.getLogger('ai_tools')
         self.stream_handler = logging.StreamHandler(self.log_stream)
+        self.stream_handler.setLevel(logging.INFO)
         self.logger.addHandler(self.stream_handler)
+        self.logger.setLevel(logging.INFO)
 
 
     def tearDown(self):
@@ -44,7 +47,7 @@ class TestDumpGit(unittest.TestCase):
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_dump_git_staged(self):
         with open("staged.txt", "w") as f: f.write("staged content")
         subprocess.run(["git", "add", "staged.txt"], cwd=self.test_dir)
@@ -60,7 +63,7 @@ class TestDumpGit(unittest.TestCase):
         self.assertIn("Znaleziono 1 zmienionych plików do przetworzenia (łącznie 1 linii kodu)", self.log_stream.getvalue())
 
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_dump_git_unstaged_and_untracked(self):
         with open("committed.txt", "a") as f: f.write("\nunstaged change")
         with open("untracked.txt", "w") as f: f.write("untracked file")
@@ -72,7 +75,7 @@ class TestDumpGit(unittest.TestCase):
         self.assertIn("File: committed.txt", output)
         self.assertIn("File: untracked.txt", output)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_dump_git_all(self):
         with open("staged.txt", "w") as f: f.write("staged")
         subprocess.run(["git", "add", "staged.txt"], cwd=self.test_dir)
@@ -91,10 +94,13 @@ class TestDumpGit(unittest.TestCase):
     
     def _write_config(self, config_content):
         """Pomocnicza funkcja do nadpisywania konfiguracji."""
+        # Dodaj output_dir jeśli nie ma w config_content
+        if 'output_dir:' not in config_content:
+            config_content = f"output_dir: {os.path.join(self.test_dir, '.dump-outputs')}\n" + config_content
         with open(os.path.join(self.test_dir, helpers.CONFIG_FILENAME), "w") as f:
             f.write(config_content)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_blacklisted_changed_files_excluded(self):
         """Testuje, czy zmienione pliki z blacklist są wykluczane."""
         # Tworzymy strukturę katalogów
@@ -123,7 +129,7 @@ blacklisted_paths:
         # tests/test.py jest blacklisted
         self.assertNotIn("File: tests/test.py", output)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_blacklisted_without_slash(self):
         """Testuje blacklist bez ukośnika na końcu."""
         os.makedirs("build", exist_ok=True)
@@ -147,7 +153,7 @@ blacklisted_paths:
         self.assertIn("File: main.js", output)
         self.assertNotIn("File: build/output.js", output)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_whitelisted_in_gitignored(self):
         """Testuje whitelist dla plików które byłyby zignorowane."""
         # Ten test jest trochę inny dla git - pliki które są zmienione
@@ -176,7 +182,7 @@ whitelisted_paths:
         self.assertIn("File: important/config.json", output)
         self.assertNotIn("File: logs/debug.log", output)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_blacklisted_parent_whitelisted_child(self):
         """Testuje blacklisted katalog z whitelisted podkatalogiem."""
         os.makedirs("vendor/libs", exist_ok=True)
@@ -207,7 +213,7 @@ whitelisted_paths:
         self.assertNotIn("File: vendor/readme.txt", output)
         self.assertNotIn("File: vendor/other/stuff.js", output)
 
-    @patch('ai_tools_lib.git.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_git.pyperclip', MagicMock())
     def test_conflicting_paths_error(self):
         """Testuje, czy konflikt między whitelist i blacklist jest wykrywany."""
         self._write_config("""

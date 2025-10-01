@@ -5,7 +5,7 @@ import unittest
 from io import StringIO # <-- POPRAWKA: Dodano brakujący import
 from unittest.mock import patch, MagicMock
 
-from ai_tools_lib import patcher
+from ai_tools.cli import ai_patch as patcher
 
 class TestAiPatch(unittest.TestCase):
 
@@ -20,7 +20,7 @@ class TestAiPatch(unittest.TestCase):
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
 
-    @patch('ai_tools_lib.patcher.pyperclip')
+    @patch('ai_tools.cli.ai_patch.pyperclip')
     def test_patch_create_and_update(self, mock_pyperclip):
         # Stworzenie istniejącego pliku
         with open("existing.js", "w") as f:
@@ -53,7 +53,7 @@ File: existing.js
         with open("existing.js", "r") as f:
             self.assertIn("// new content", f.read())
 
-    @patch('ai_tools_lib.patcher.pyperclip')
+    @patch('ai_tools.cli.ai_patch.pyperclip')
     def test_patch_security_prevents_path_traversal(self, mock_pyperclip):
         # Ścieżka, która próbuje wyjść z katalogu roboczego
         evil_path = "../evil.txt"

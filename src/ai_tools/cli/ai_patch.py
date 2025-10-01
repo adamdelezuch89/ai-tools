@@ -1,9 +1,41 @@
+import argparse
 import os
 import sys
 import pyperclip
-from .helpers import log_error, log_error_non_fatal, log_info, log_success, parse_patch_content
+
+# Import from new modular structure
+from ai_tools.utils.logger import log_error, log_error_non_fatal, log_info, log_success
+from ai_tools.core.patch_ops import parse_patch_content
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='Aplikuje zmiany z schowka do plików projektu',
+        epilog='''
+Format schowka:
+  ---
+  File: path/to/file.ext
+  ---
+  ```language
+  <zawartość pliku>
+  ```
+
+Przykład:
+  ---
+  File: src/app.py
+  ---
+  ```python
+  print("Hello World")
+  ```
+
+Działanie:
+  1. Skopiuj zmiany do schowka (Ctrl+C)
+  2. Uruchom: ai-patch
+  3. Pliki zostaną zaktualizowane lub utworzone
+        ''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    args = parser.parse_args()
+    
     base_dir = os.getcwd()
     try:
         patch_content = pyperclip.paste()

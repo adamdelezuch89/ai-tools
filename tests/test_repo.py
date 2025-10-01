@@ -7,7 +7,8 @@ import logging
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-from ai_tools_lib import repo, helpers
+from ai_tools.cli import dump_repo as repo
+from ai_tools.utils import helpers
 
 class TestDumpRepo(unittest.TestCase):
 
@@ -21,8 +22,8 @@ class TestDumpRepo(unittest.TestCase):
 
         # Podstawowa konfiguracja (będzie modyfikowana w poszczególnych testach)
         with open(os.path.join(self.test_dir, helpers.CONFIG_FILENAME), "w") as f:
-            f.write("""
-output_dir: .dump-outputs
+            f.write(f"""
+output_dir: {os.path.join(self.test_dir, '.dump-outputs')}
 blacklisted_paths:
   - ".venv/"
   - "*.lock"
@@ -73,11 +74,14 @@ whitelisted_paths:
 
     def _write_config(self, config_content):
         """Pomocnicza funkcja do nadpisywania konfiguracji."""
+        # Dodaj output_dir jeśli nie ma w config_content
+        if 'output_dir:' not in config_content:
+            config_content = f"output_dir: {os.path.join(self.test_dir, '.dump-outputs')}\n" + config_content
         with open(os.path.join(self.test_dir, helpers.CONFIG_FILENAME), "w") as f:
             f.write(config_content)
 
     # TEST 1: Pliki są gitignored - nie powinny być w dumpie
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_gitignored_files_excluded(self):
         """Testuje, czy pliki z .gitignore są wykluczane z dumpu."""
         # node_modules jest w .gitignore
@@ -94,7 +98,7 @@ whitelisted_paths:
         self.assertIn("File: package.json", output)
 
     # TEST 2: Pliki nie są gitignored, ale są w blacklisted - nie powinny być w dumpie
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_blacklisted_files_excluded(self):
         """Testuje, czy pliki z blacklist są wykluczane z dumpu."""
         self._write_config("""
@@ -122,7 +126,7 @@ whitelisted_paths: []
         self.assertIn("File: package.json", output)
 
     # TEST 2b: Blacklist bez ukośników na końcu
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_blacklisted_directories_without_slash(self):
         """Testuje, czy katalogi w blacklist działają bez ukośnika na końcu."""
         self._write_config("""
@@ -147,7 +151,7 @@ whitelisted_paths: []
         self.assertNotIn("File: .venv/lib/a.py", output)
 
     # TEST 3: Pliki są gitignored, ale są whitelisted - powinny być w dumpie
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_gitignored_but_whitelisted_files_included(self):
         """Testuje, czy pliki gitignored ale whitelisted są w dumpie."""
         # .github/workflows/main.yaml jest whitelisted mimo że może być ignorowany
@@ -161,7 +165,7 @@ whitelisted_paths: []
         self.assertIn("File: .github/workflows/main.yaml", output)
 
     # TEST 3b: Katalog gitignored, ale whitelisted
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_gitignored_directory_but_whitelisted_included(self):
         """Testuje, czy cały katalog gitignored ale whitelisted jest w dumpie."""
         # Dodaj plik do node_modules
@@ -186,7 +190,7 @@ whitelisted_paths:
         self.assertIn("File: node_modules/some-lib/index.js", output)
 
     # TEST 4: Pliki są w obu listach - błąd/ostrzeżenie
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_conflicting_whitelist_blacklist_warning(self):
         """Testuje, czy konflikt między whitelist i blacklist generuje ostrzeżenie."""
         self._write_config("""
@@ -218,7 +222,7 @@ whitelisted_paths:
         )
 
     # TEST 4b: Konflikt z różnymi formatami (z/bez ukośnika)
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_conflicting_whitelist_blacklist_different_formats(self):
         """Testuje konflikt między whitelist i blacklist z różnymi formatami."""
         self._write_config("""
@@ -251,7 +255,7 @@ whitelisted_paths:
         )
 
     # TEST 5: Ścieżka whitelisted, ale zagnieżdżona blacklisted
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_whitelisted_parent_blacklisted_child(self):
         """Testuje whitelisted katalog z blacklisted podkatalogiem."""
         # Tworzymy strukturę: docs/ (whitelisted) z docs/internal/ (blacklisted)
@@ -290,7 +294,7 @@ whitelisted_paths:
         self.assertNotIn("File: docs/internal/secret.md", output)
 
     # TEST 6: Ścieżka blacklisted, ale zagnieżdżona whitelisted
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_blacklisted_parent_whitelisted_child(self):
         """Testuje blacklisted katalog z whitelisted podkatalogiem."""
         # Tworzymy strukturę: build/ (blacklisted) z build/important/ (whitelisted)
@@ -327,7 +331,7 @@ whitelisted_paths:
         self.assertIn("File: build/important/config.js", output)
 
     # TEST 6b: Złożony przypadek - wielopoziomowe zagnieżdżenie
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_complex_nested_whitelist_blacklist(self):
         """Testuje złożone zagnieżdżenie whitelist/blacklist."""
         # Struktura:
@@ -374,7 +378,7 @@ whitelisted_paths:
         self.assertNotIn("File: vendor/libs/node_modules/dep.js", output)
 
     # BONUS TEST: Sprawdzenie czy .gitignore sam nie jest dumpowany
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_gitignore_file_itself_excluded(self):
         """Testuje, czy sam plik .gitignore nie jest dumpowany."""
         with patch.object(sys, 'argv', ['dump-repo']):
@@ -387,7 +391,7 @@ whitelisted_paths:
         self.assertNotIn("File: .gitignore", output)
 
     # BONUS TEST: Wildcardy w blacklist
-    @patch('ai_tools_lib.repo.pyperclip', MagicMock())
+    @patch('ai_tools.cli.dump_repo.pyperclip', MagicMock())
     def test_wildcard_patterns_in_blacklist(self):
         """Testuje, czy wzorce wildcard w blacklist działają poprawnie."""
         os.makedirs(os.path.join(self.test_dir, "logs"), exist_ok=True)

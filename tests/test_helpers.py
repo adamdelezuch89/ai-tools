@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-from ai_tools_lib.helpers import _extract_path_from_text, _find_blocks_with_regex, parse_patch_content
+from ai_tools.utils.helpers import _extract_path_from_text, _find_blocks_with_regex, parse_patch_content
 
 
 class TestExtractPathFromText(unittest.TestCase):
