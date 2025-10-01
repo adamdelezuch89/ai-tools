@@ -14,17 +14,97 @@ def is_binary(filepath, chunk_size=1024):
             return b'\0' in f.read(chunk_size)
     except IOError: return True
 
+def normalize_path_pattern(pattern):
+    """
+    Normalizuje wzorzec ścieżki:
+    - Zamienia backslashe na forwardslashe
+    - Usuwa końcowy ukośnik (będzie dodany przy porównaniach katalogów)
+    """
+    normalized = pattern.replace(os.path.sep, '/').rstrip('/')
+    return normalized
+
+def is_directory_pattern(pattern):
+    """
+    Sprawdza czy wzorzec reprezentuje katalog (nie zawiera wildcardów).
+    """
+    return '*' not in pattern and '?' not in pattern and '[' not in pattern
+
 def is_path_match(rel_path, patterns):
+    """
+    Sprawdza czy ścieżka pasuje do któregoś z wzorców.
+    Obsługuje katalogi z ukośnikiem i bez, oraz wildcardy.
+    """
     path_to_check = rel_path.replace(os.path.sep, '/')
+    
     for pattern in patterns:
-        if pattern.endswith('/'):
-            if path_to_check.startswith(pattern) or path_to_check == pattern.rstrip('/'):
+        normalized_pattern = normalize_path_pattern(pattern)
+        
+        # Jeśli to wzorzec katalogu (bez wildcardów)
+        if is_directory_pattern(pattern):
+            # Sprawdź czy ścieżka jest w tym katalogu lub jest tym katalogiem
+            if path_to_check.startswith(normalized_pattern + '/') or path_to_check == normalized_pattern:
                 return True
-        if fnmatch.fnmatch(path_to_check, pattern):
+        
+        # Wildcardy - użyj fnmatch
+        if fnmatch.fnmatch(path_to_check, normalized_pattern):
             return True
+            
     return False
 
-# --- POCZĄTEK OSTATECZNEJ POPRAWKI ---
+def find_most_specific_match(rel_path, patterns):
+    """
+    Znajduje najbardziej specyficzny (najdłuższy) wzorzec pasujący do ścieżki.
+    Zwraca krotkę (pattern, specificity) lub (None, 0) jeśli brak dopasowania.
+    """
+    path_to_check = rel_path.replace(os.path.sep, '/')
+    best_match = None
+    best_specificity = 0
+    
+    for pattern in patterns:
+        normalized_pattern = normalize_path_pattern(pattern)
+        
+        # Sprawdź czy pasuje
+        matches = False
+        specificity = 0
+        
+        if is_directory_pattern(pattern):
+            # Dla katalogów: sprawdź prefix
+            if path_to_check.startswith(normalized_pattern + '/') or path_to_check == normalized_pattern:
+                matches = True
+                # Specyficzność = długość ścieżki (więcej segmentów = bardziej specyficzne)
+                specificity = normalized_pattern.count('/') + 1
+        elif fnmatch.fnmatch(path_to_check, normalized_pattern):
+            # Dla wildcardów: również pasuje, ale z niższą specyficznością
+            matches = True
+            specificity = normalized_pattern.count('/') + 0.5  # Wildcardy mają niższą specyficzność
+        
+        if matches and specificity > best_specificity:
+            best_match = normalized_pattern
+            best_specificity = specificity
+    
+    return (best_match, best_specificity)
+
+def validate_config_paths(config):
+    """
+    Waliduje konfigurację sprawdzając konflikty między whitelist i blacklist.
+    Rzuca ostrzeżeniem jeśli ta sama ścieżka jest w obu listach.
+    """
+    whitelisted = config.get('whitelisted_paths', [])
+    blacklisted = config.get('blacklisted_paths', [])
+    
+    # Normalizuj wszystkie ścieżki dla porównania
+    normalized_whitelist = {normalize_path_pattern(p) for p in whitelisted}
+    normalized_blacklist = {normalize_path_pattern(p) for p in blacklisted}
+    
+    # Znajdź konflikty
+    conflicts = normalized_whitelist & normalized_blacklist
+    
+    if conflicts:
+        conflicts_list = ', '.join(f'"{c}"' for c in sorted(conflicts))
+        log_error(f"NIEPRAWIDŁOWA KONFIGURACJA: Następujące ścieżki występują zarówno w whitelisted_paths jak i blacklisted_paths: {conflicts_list}. "
+                  f"Usuń konflikty z pliku konfiguracyjnego '{CONFIG_FILENAME}'.")
+
+# --- POCZĄTEK NOWEJ IMPLEMENTACJI ---
 def get_files_to_dump(paths_to_scan, start_dir, project_root, git_root, config):
     whitelisted_patterns = config.get('whitelisted_paths', [])
     # Dodajemy .gitignore do domyślnej czarnej listy, aby sam plik nie był dumpowany
@@ -32,9 +112,8 @@ def get_files_to_dump(paths_to_scan, start_dir, project_root, git_root, config):
     output_dir_abs = os.path.abspath(os.path.join(project_root, config['output_dir']))
     config_file_abs = os.path.abspath(os.path.join(project_root, CONFIG_FILENAME))
 
+    # Krok 1: Pobierz pliki z git (nieignorowane przez .gitignore)
     files_from_git = set()
-
-    # Krok 1: Użyj `git ls-files` jako źródła prawdy o plikach nieignorowanych przez .gitignore
     if git_root:
         try:
             cmd = ['git', '-C', git_root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z']
@@ -43,34 +122,52 @@ def get_files_to_dump(paths_to_scan, start_dir, project_root, git_root, config):
             files_from_git.update(os.path.normpath(os.path.join(git_root, p)) for p in git_files_rel)
         except (subprocess.CalledProcessError, FileNotFoundError):
             log_warning("Polecenie 'git ls-files' zawiodło. Skanowanie ręczne bez uwzględnienia .gitignore.")
-            # Fallback: weź wszystkie pliki, jeśli git zawiedzie
-            for root, _, files in os.walk(project_root):
-                for name in files: files_from_git.add(os.path.join(root, name))
-    else:
-        # Fallback: weź wszystkie pliki, jeśli nie jesteśmy w repo gita
-        for root, _, files in os.walk(project_root):
-            for name in files: files_from_git.add(os.path.join(root, name))
-    
-    # Krok 2: Zastosuj blacklist do plików z Gita
-    files_after_blacklist = set()
-    for f_path in files_from_git:
-        rel_path = os.path.relpath(f_path, project_root)
-        if not is_path_match(rel_path, blacklisted_patterns):
-            files_after_blacklist.add(f_path)
-            
-    # Krok 3: Dodaj pliki z whitelist (mają wyższy priorytet niż .gitignore, ale nie niż blacklist)
-    if whitelisted_patterns:
-        for root, _, files in os.walk(project_root):
-            for name in files:
-                f_path = os.path.join(root, name)
-                rel_path = os.path.relpath(f_path, project_root)
-                if is_path_match(rel_path, whitelisted_patterns) and not is_path_match(rel_path, blacklisted_patterns):
-                    files_after_blacklist.add(f_path)
 
+    # Krok 2: Zbierz WSZYSTKIE pliki z systemu (dla whitelist)
+    all_files_in_project = set()
+    for root, _, files in os.walk(project_root):
+        for name in files:
+            all_files_in_project.add(os.path.join(root, name))
+    
+    # Krok 3: Dla każdego pliku zastosuj logikę priorytetyzacji
+    final_files = set()
+    
+    for f_path in all_files_in_project:
+        rel_path = os.path.relpath(f_path, project_root)
+        
+        # Znajdź najbardziej specyficzne dopasowania w obu listach
+        whitelist_match, whitelist_spec = find_most_specific_match(rel_path, whitelisted_patterns)
+        blacklist_match, blacklist_spec = find_most_specific_match(rel_path, blacklisted_patterns)
+        
+        # Logika decyzyjna:
+        should_include = False
+        
+        if whitelist_spec > 0 and blacklist_spec > 0:
+            # Oba pasują - bardziej specyficzny wygrywa
+            if whitelist_spec > blacklist_spec:
+                should_include = True
+            elif blacklist_spec > whitelist_spec:
+                should_include = False
+            else:
+                # Ta sama specyficzność - blacklist wygrywa (ale to nie powinno się zdarzyć po walidacji)
+                should_include = False
+        elif whitelist_spec > 0:
+            # Tylko whitelist - załącz (nawet jeśli gitignored)
+            should_include = True
+        elif blacklist_spec > 0:
+            # Tylko blacklist - wyklucz
+            should_include = False
+        else:
+            # Brak reguł - użyj wyniku git (czy plik był w git ls-files?)
+            should_include = f_path in files_from_git
+        
+        if should_include:
+            final_files.add(f_path)
+    
     # Krok 4: Ogranicz do ścieżek podanych przez użytkownika (zakres)
     scan_paths_abs = [os.path.abspath(os.path.join(start_dir, p)) for p in paths_to_scan]
     files_in_scope = set()
-    for f_path in files_after_blacklist:
+    for f_path in final_files:
         for scan_path in scan_paths_abs:
             if f_path == scan_path or f_path.startswith(os.path.normpath(scan_path) + os.sep):
                 files_in_scope.add(f_path)
@@ -89,6 +186,9 @@ def main():
     project_root = find_project_root(start_dir)
     git_root = find_git_root(start_dir)
     config = get_config(project_root)
+    
+    # Waliduj konfigurację przed rozpoczęciem pracy
+    validate_config_paths(config)
 
     parser = argparse.ArgumentParser(description="Tworzy dump zawartości plików z projektu.")
     parser.add_argument('paths', nargs='*', default=['.'], help="Lista ścieżek do przetworzenia (względem bieżącego katalogu).")
@@ -127,4 +227,4 @@ def main():
         
     log_success(f"Pomyślnie utworzono dump w pliku: {os.path.relpath(output_filepath, start_dir)}")
     return 0
-# --- KONIEC OSTATECZNEJ POPRAWKI ---
+# --- KONIEC NOWEJ IMPLEMENTACJI ---
