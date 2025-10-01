@@ -2,19 +2,23 @@
 
 Zestaw narzędzi wiersza poleceń dla systemów Ubuntu/Debian, przeznaczony do tworzenia zrzutów kodu dla modeli AI oraz do implementowania zmian wygenerowanych przez AI.
 
-Narzędzia działają w kontekście "projektu", który jest definiowany przez obecność pliku `.ai-tools-config.yaml`. Wyszukiwanie projektu odbywa się od bieżącego katalogu roboczego w górę.
+Narzędzia działają w kontekście **projektu**, który jest automatycznie definiowany przez katalog, w którym wykonujesz polecenia.
 
 ## ✨ Główne Zastosowania
 
-Głównym celem narzędzi jest usprawnienie współpracy z modelami językowymi (AI) poprzez dwie kluczowe funkcje:
+Głównym celem narzędzi jest **usprawnienie współpracy z modelami językowymi (AI)** w terminalu, umożliwiając łatwe przygotowanie kontekstu kodu dla AI oraz automatyczne wdrażanie zmian generowanych przez nie.
 
-1.  **Przygotowanie Kodu dla AI (`dump-repo`, `dump-git`)**
-    *   **Co to robi?** Konsoliduje kod całego Twojego projektu lub tylko zmiany z Git do jednego, czystego pliku tekstowego.
-    *   **Po co?** Abyś mógł łatwo skopiować i wkleić kontekst swojego repozytorium do modelu językowego (np. Gemini, ChatGPT, Claude). Dzięki temu możesz zadawać precyzyjne pytania, prosić o refaktoryzację, debugowanie lub implementację nowych funkcji. Narzędzie inteligentnie filtruje niepotrzebne pliki (np. `node_modules`) i ukrywa wrażliwe dane.
+### 1. Przygotowanie Kontekstu dla AI (`dump-repo`, `dump-git`)
 
-2.  **Implementacja Zmian od AI (`ai-patch`)**
-    *   **Co to robi?** Automatycznie wgrywa zmiany w kodzie, które otrzymałeś od modelu AI.
-    *   **Po co?** Kiedy AI wygeneruje dla Ciebie fragmenty kodu lub całe pliki, zamiast ręcznie je kopiować i wklejać do odpowiednich miejsc w projekcie, po prostu kopiujesz całą odpowiedź AI do schowka i uruchamiasz `ai-patch`. Narzędzie samo rozpozna ścieżki plików i wdroży zmiany za Ciebie, oszczędzając czas i redukując ryzyko pomyłki.
+* **Co to robi?** Konsoliduje kod całego Twojego projektu (`dump-repo`) lub tylko **zmienione pliki** z Git (`dump-git`) do jednego, czystego pliku tekstowego, a następnie **kopiuje ten zrzut do schowka systemowego**.
+* **Po co?** Dzięki temu możesz **łatwo wkleić kontekst swojego kodu** bezpośrednio do interfejsu webowego dowolnego modelu językowego (np. Gemini, ChatGPT, Claude) i natychmiast zadawać precyzyjne pytania, prosić o refaktoryzację, debugowanie lub implementację nowych funkcji.
+* **Bezpieczeństwo i Czystość:** Narzędzie inteligentnie filtruje niepotrzebne pliki (np. `node_modules`), pozwala na **wykluczanie krytycznych ścieżek** z dumpowania oraz **ukrywa wrażliwe dane** (np. wartości zmiennych z plików `.env`) w całym kodzie, chroniąc przed wyciekiem.
+* **Przywracanie Wersji:** Możesz również **przywrócić pliki** z poprzednio utworzonych dumpów.
+
+### 2. Implementacja Zmian od AI (`ai-patch`)
+
+* **Co to robi?** Automatycznie wgrywa zmiany w kodzie, które otrzymałeś od modelu AI, wprost ze **schowka systemowego**.
+* **Po co?** Kiedy AI wygeneruje dla Ciebie fragmenty kodu lub całe pliki, **zamiast ręcznie kopiować i wklejać**, po prostu kopiujesz całą odpowiedź AI do schowka i uruchamiasz `ai-patch`. Narzędzie samodzielnie rozpoznaje ścieżki plików i wdroży zmiany za Ciebie, oszczędzając czas i redukując ryzyko pomyłki.
 
 ## Instalacja
 
