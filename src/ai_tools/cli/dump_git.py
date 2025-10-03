@@ -154,7 +154,8 @@ Co będzie dumpowane (domyślnie):
     # Handle --init flag
     if args.init:
         try:
-            created_path = create_default_config(project_root)
+            # Create config in current directory (pwd), not in found project_root
+            created_path = create_default_config(start_dir)
             log_success(f"Utworzono plik konfiguracyjny: {os.path.relpath(created_path, start_dir)}")
             log_info("Edytuj plik aby dostosować ustawienia do swojego projektu.")
             return 0
